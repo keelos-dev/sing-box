@@ -63,6 +63,8 @@ type NetworkManager struct {
 	interfaceUpdateAccess   sync.Mutex
 	interfaceUpdateCancel   context.CancelFunc
 	networkResetPending     bool
+	lastResetIndex          int
+	lastResetName           string
 	resetRunAccess          sync.Mutex
 	powerUpdateAccess       sync.Mutex
 	powerUpdateCancel       context.CancelFunc
@@ -548,6 +550,12 @@ func (r *NetworkManager) updateInterface(ctx context.Context, defaultInterface *
 	resetNetwork := ctx.Err() == nil && r.networkResetPending
 	if resetNetwork {
 		r.networkResetPending = false
+		// keelGW: the default interface is the same one (only its addresses / DNS servers changed,
+		// e.g. rotating IPv6 temporary addresses): keep existing connections instead of closing them all.
+		if r.lastResetIndex == defaultInterface.Index && r.lastResetName == defaultInterface.Name {
+			resetNetwork = false
+		}
+		r.lastResetIndex, r.lastResetName = defaultInterface.Index, defaultInterface.Name
 	}
 	r.interfaceUpdateAccess.Unlock()
 	if resetNetwork {
