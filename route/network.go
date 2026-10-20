@@ -176,6 +176,14 @@ func (r *NetworkManager) Start(stage adapter.StartStage, scope *adapter.Scope) e
 				return err
 			}
 			scope.Add(r.interfaceMonitor.Close)
+			// keelGW: remember the default interface at startup, so the first update is compared with it
+			// (logged as a real diff, and no reset when the interface is still the same one)
+			if defaultInterface := r.interfaceMonitor.DefaultInterface(); defaultInterface != nil {
+				r.interfaceUpdateAccess.Lock()
+				r.lastInterfaceSnapshot = takeInterfaceSnapshot(defaultInterface)
+				r.lastResetIndex, r.lastResetName = defaultInterface.Index, defaultInterface.Name
+				r.interfaceUpdateAccess.Unlock()
+			}
 			interfaceUpdateElement := r.interfaceMonitor.RegisterCallback(r.notifyInterfaceUpdate)
 			scope.Add(func() error {
 				r.interfaceMonitor.UnregisterCallback(interfaceUpdateElement)
