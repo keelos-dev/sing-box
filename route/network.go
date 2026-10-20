@@ -65,6 +65,7 @@ type NetworkManager struct {
 	networkResetPending     bool
 	lastResetIndex          int
 	lastResetName           string
+	lastInterfaceSnapshot   *interfaceSnapshot
 	resetRunAccess          sync.Mutex
 	powerUpdateAccess       sync.Mutex
 	powerUpdateCancel       context.CancelFunc
@@ -483,9 +484,12 @@ func (r *NetworkManager) ResetNetwork(ctx context.Context) {
 	r.router.ResetNetwork()
 }
 
-func (r *NetworkManager) notifyInterfaceUpdate(_ *control.Interface, _ int) {
+func (r *NetworkManager) notifyInterfaceUpdate(defaultInterface *control.Interface, _ int) {
 	r.interfaceUpdateAccess.Lock()
 	defer r.interfaceUpdateAccess.Unlock()
+	snapshot := takeInterfaceSnapshot(defaultInterface)
+	r.logger.Info("default interface update: ", describeInterfaceChange(r.lastInterfaceSnapshot, snapshot))
+	r.lastInterfaceSnapshot = snapshot
 	r.networkResetPending = true
 	if r.startedCtx != nil {
 		r.dispatchInterfaceUpdateLocked()
@@ -554,11 +558,13 @@ func (r *NetworkManager) updateInterface(ctx context.Context, defaultInterface *
 		// e.g. rotating IPv6 temporary addresses): keep existing connections instead of closing them all.
 		if r.lastResetIndex == defaultInterface.Index && r.lastResetName == defaultInterface.Name {
 			resetNetwork = false
+			r.logger.Info("default interface unchanged, keep existing connections")
 		}
 		r.lastResetIndex, r.lastResetName = defaultInterface.Index, defaultInterface.Name
 	}
 	r.interfaceUpdateAccess.Unlock()
 	if resetNetwork {
+		r.logger.Info("reset network: close existing connections")
 		r.ResetNetwork(ctx)
 	}
 }
